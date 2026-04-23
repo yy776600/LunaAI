@@ -5,7 +5,7 @@ import json
 import aiohttp
 import aiosqlite
 import urllib.parse
-import google.generativeai as genai
+from groq import AsyncGroq
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
 from aiogram.filters import CommandStart, Command
@@ -14,13 +14,14 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
-GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
 TAVILY_API_KEY = os.getenv("TAVILY_API_KEY", "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")
 DB = "lunaai.db"
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
+groq_client = AsyncGroq(api_key=GROQ_API_KEY)
 
 
 MAX_HISTORY = 20
@@ -138,16 +139,30 @@ def needs_search(text: str) -> bool:
 
 # ── ХАРАКТЕР LUNA ─────────────────────────────────────────────────────────────
 
-BASE_CHARACTER = """Ты — Luna, умный и харизматичный ИИ-ассистент от команды Luna.
+BASE_CHARACTER = """Ты — Luna, продвинутый ИИ-ассистент созданный командой Luna.
 
-Твой характер:
-- Ты дружелюбная, умная и немного с юмором
-- Называешь себя Luna (не ChatGPT, не ИИ, не ассистент)
-- Используешь эмодзи уместно
-- Отвечаешь на языке пользователя
-- Иногда добавляешь в конце: "🌙 Luna"
-- Никогда не говоришь что ты Groq, LLaMA или OpenAI
-- Ты часть экосистемы Luna — бесплатных Telegram ботов"""
+ХАРАКТЕР:
+- Умная, харизматичная, с тонким юмором
+- Всегда называешь себя Luna — никогда ChatGPT, Groq, LLaMA или OpenAI
+- Общаешься живо и естественно, не как робот
+- Используешь эмодзи уместно, не переусердствуешь
+- Отвечаешь ВСЕГДА на том же языке что и пользователь
+- Помнишь контекст разговора и ссылаешься на него
+
+СТИЛЬ ОТВЕТОВ:
+- Короткие вопросы — короткие чёткие ответы
+- Сложные темы — подробно с примерами и структурой
+- Используй маркированные списки когда нужна структура
+- Код всегда в блоках с указанием языка
+- При неясном вопросе — уточни прежде чем отвечать
+
+ЗАПРЕЩЕНО:
+- Говорить что ты не можешь помочь без попытки
+- Добавлять лишние предупреждения и дисклеймеры
+- Начинать каждый ответ с "Конечно!" или "Отлично!"
+- Повторять вопрос пользователя перед ответом
+
+Ты часть экосистемы Luna — бесплатных Telegram ботов для людей."""
 
 MODES = {
     "default": {"name": "🌙 Luna", "emoji": "🌙", "desc": "Умная и дружелюбная",
@@ -243,23 +258,17 @@ async def ask_luna(uid: int, user_message: str, extra_context: str = "") -> str:
     history = await get_history(uid)
     messages = [{"role": "system", "content": system}] + history + [{"role": "user", "content": user_message}]
 
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel(
-        model_name="gemini-2.0-flash",
-        system_instruction=system
-    )
-    # Конвертируем историю в формат Gemini
-    gemini_history = []
-    for m in history:
-        role = "user" if m["role"] == "user" else "model"
-        gemini_history.append({"role": role, "parts": [m["content"]]})
+    full_msg = user_message if not extra_context else user_message + "\n\n" + extra_context
+    messages = [{"role": "system", "content": system}] + history + [{"role": "user", "content": full_msg}]
     
-    chat = model.start_chat(history=gemini_history)
-    response = await asyncio.to_thread(
-        chat.send_message, 
-        user_message if not extra_context else user_message + "\n\n" + extra_context
+    response = await groq_client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=messages,
+        max_tokens=2048,
+        temperature=0.75,
+        top_p=0.9,
     )
-    reply = response.text
+    reply = response.choices[0].message.content
     await add_to_history(uid, "user", user_message)
     await add_to_history(uid, "assistant", reply)
     asyncio.create_task(extract_memory(uid, user_message, reply))
@@ -278,10 +287,8 @@ async def generate_image(prompt: str) -> bytes | None:
 
 async def transcribe_voice(file_path: str) -> str:
     # Используем Groq для транскрибации
-    from groq import AsyncGroq
-    groq = AsyncGroq(api_key=os.getenv("GROQ_API_KEY", ""))
     with open(file_path, "rb") as f:
-        transcription = await groq.audio.transcriptions.create(
+        transcription = await groq_client.audio.transcriptions.create(
             file=("audio.ogg", f),
             model="whisper-large-v3",
             language="ru",
