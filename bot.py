@@ -92,7 +92,7 @@ async def ask_groq(uid: int, user_message: str) -> str:
     messages = [{"role": "system", "content": system}] + user_histories[uid]
 
     response = await groq_client.chat.completions.create(
-       model="llama-3.3-70b-versatile",,
+       model="llama-3.3-70b-versatile",
         messages=messages,
         max_tokens=1024,
         temperature=0.7,
