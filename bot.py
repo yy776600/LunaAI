@@ -14,7 +14,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY", "key_CaLkfzCKdenSrfbYogv9F")
+TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY", "")
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
