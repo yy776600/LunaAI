@@ -2,7 +2,6 @@ import asyncio
 import logging
 import os
 import aiohttp
-import base64
 from groq import AsyncGroq
 from aiogram import Bot, Dispatcher, F
 from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
@@ -14,7 +13,7 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 BOT_TOKEN = os.getenv("BOT_TOKEN", "")
 GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
-TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY", "")
+TOGETHER_API_KEY = os.getenv("TOGETHER_API_KEY", "key_CaLkfzCKdenSrfbYogv9F")
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
@@ -154,28 +153,16 @@ async def ask_groq(uid: int, user_message: str) -> str:
 
 
 async def generate_image(prompt: str) -> bytes | None:
-    url = "https://api.together.xyz/v1/images/generations"
-    headers = {
-        "Authorization": f"Bearer {TOGETHER_API_KEY}",
-        "Content-Type": "application/json",
-    }
-    data = {
-        "model": "black-forest-labs/FLUX.1-schnell-Free",
-        "prompt": prompt,
-        "width": 1024,
-        "height": 1024,
-        "steps": 4,
-        "n": 1,
-        "response_format": "b64_json",
-    }
+    """Генерация через Pollinations AI — полностью бесплатно."""
+    import urllib.parse
+    encoded = urllib.parse.quote(prompt)
+    url = f"https://image.pollinations.ai/prompt/{encoded}?width=1024&height=1024&nologo=true&enhance=true"
     async with aiohttp.ClientSession() as session:
-        async with session.post(url, headers=headers, json=data, timeout=aiohttp.ClientTimeout(total=60)) as resp:
+        async with session.get(url, timeout=aiohttp.ClientTimeout(total=60)) as resp:
             if resp.status != 200:
-                logging.error(f"Image API error: {resp.status} {await resp.text()}")
+                logging.error(f"Image API error: {resp.status}")
                 return None
-            result = await resp.json()
-            b64 = result["data"][0]["b64_json"]
-            return base64.b64decode(b64)
+            return await resp.read()
 
 
 @dp.message(CommandStart())
